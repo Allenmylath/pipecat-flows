@@ -1,6 +1,4 @@
-async def check_kitchen_status(action: dict) -> None:
-    """Check if kitchen is open and log status."""
-    logger.info("Checking kitchen status")#
+#
 # Copyright (c) 2024, Daily
 #
 # SPDX-License-Identifier: BSD 2-Clause License
@@ -196,6 +194,10 @@ async def add_to_cart(args: FlowArgs) -> Dict:
     shopping_cart.add_item(cart_item)
     
     return {"status": "added", "cart": shopping_cart.get_cart_summary()}
+    
+async def check_kitchen_status(action: dict) -> None:
+    """Check if kitchen is open and log status."""
+    logger.info("Checking kitchen status")
 
 
 flow_config: FlowConfig = {
