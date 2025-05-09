@@ -1,4 +1,6 @@
-#
+async def check_kitchen_status(action: dict) -> None:
+    """Check if kitchen is open and log status."""
+    logger.info("Checking kitchen status")#
 # Copyright (c) 2024, Daily
 #
 # SPDX-License-Identifier: BSD 2-Clause License
@@ -148,9 +150,12 @@ shopping_cart = ShoppingCart()
 
 
 # Function handlers
-async def check_kitchen_status(action: dict) -> None:
-    """Check if kitchen is open and log status."""
-    logger.info("Checking kitchen status")
+async def view_cart(args: FlowArgs) -> Dict:
+    """Display the current contents of the shopping cart."""
+    if not shopping_cart.items:
+        return {"status": "empty", "message": "Your cart is currently empty."}
+    
+    return {"status": "success", "cart": shopping_cart.get_cart_summary()}
 
 
 async def select_pizza_order(args: FlowArgs) -> PizzaOrderResult:
@@ -206,7 +211,7 @@ flow_config: FlowConfig = {
             "task_messages": [
                 {
                     "role": "system",
-                    "content": "For this step, ask the user if they want pizza or coke, and wait for them to use a function to choose. Start off by greeting them if this is the first interaction. Be friendly and casual; you're taking a food order over the phone. If they're returning to order more, remind them of their current cart items.",
+                    "content": "For this step, ask the user if they want pizza or coke, and wait for them to use a function to choose. Start off by greeting them if this is the first interaction. Be friendly and casual; you're taking a food order over the phone. If they say 'cart' or ask to see their cart, use the view_cart function. If there are items in the cart already, mention that they can check out or continue shopping.",
                 }
             ],
             "pre_actions": [
@@ -237,6 +242,15 @@ flow_config: FlowConfig = {
                 {
                     "type": "function",
                     "function": {
+                        "name": "view_cart",
+                        "handler": view_cart,
+                        "description": "Show the current items in the shopping cart",
+                        "parameters": {"type": "object", "properties": {}},
+                    },
+                },
+                {
+                    "type": "function",
+                    "function": {
                         "name": "checkout",
                         "description": "User is ready to checkout with current items in cart.",
                         "parameters": {"type": "object", "properties": {}},
@@ -250,14 +264,14 @@ flow_config: FlowConfig = {
                 {
                     "role": "system",
                     "content": """You are handling a pizza order. Use the available functions:
-- Use select_pizza_order when the user specifies both size AND type
+- Use select_pizza_order when the user specifies size, type, AND quantity
 
 Pricing:
 - Small: $10
 - Medium: $15
 - Large: $20
 
-Remember to be friendly and casual.""",
+Ask the user how many pizzas they want if they don't mention quantity. Remember to be friendly and casual.""",
                 }
             ],
             "functions": [
@@ -299,14 +313,14 @@ Remember to be friendly and casual.""",
                 {
                     "role": "system",
                     "content": """You are handling a coke order. Use the available functions:
-- Use select_coke_order when the user specifies the size
+- Use select_coke_order when the user specifies size AND quantity
 
 Pricing:
 - Small: $2
 - Medium: $3
 - Large: $4
 
-Remember to be friendly and casual.""",
+Ask the user how many cokes they want if they don't mention quantity. Remember to be friendly and casual.""",
                 }
             ],
             "functions": [
@@ -342,13 +356,13 @@ Remember to be friendly and casual.""",
             "task_messages": [
                 {
                     "role": "system",
-                    "content": """The user has selected an item. Confirm that the item has been added to their cart and ask if they want to continue shopping or check out.
+                    "content": """The user has selected an item with a quantity. Confirm that the items have been added to their cart and ask if they want to continue shopping or check out.
                     
 Use the available functions:
-- Use add_to_cart to add the current item to the cart
+- Use add_to_cart to add the current items to the cart
 - The user can then either continue_shopping or checkout
 
-Be friendly and clear when confirming the item has been added to the cart.""",
+Be friendly and clear when confirming the items have been added to the cart. Make sure to mention the quantity and read back the current cart contents to the user.""",
                 }
             ],
             "functions": [
