@@ -86,10 +86,12 @@ class CokeOrderResult(FlowResult):
 
 
 class CartItem:
-    def __init__(self, item_type: str, details: dict, price: float):
+    def __init__(self, item_type: str, details: dict, price: float, quantity: int = 1):
         self.item_type = item_type
         self.details = details
-        self.price = price
+        self.price_per_unit = price
+        self.quantity = quantity
+        self.total_price = price * quantity
 
 
 # Shopping cart to store items
@@ -97,19 +99,47 @@ class ShoppingCart:
     def __init__(self):
         self.items: List[CartItem] = []
         self.total_price: float = 0.0
+        self.total_items: int = 0
 
     def add_item(self, item: CartItem):
+        # Check if the item already exists in the cart
+        for existing_item in self.items:
+            if existing_item.item_type == item.item_type and self._are_details_same(existing_item.details, item.details):
+                # Update quantity instead of adding a new item
+                existing_item.quantity += item.quantity
+                existing_item.total_price = existing_item.price_per_unit * existing_item.quantity
+                self._recalculate_totals()
+                return
+        
+        # If the item doesn't exist, add it as a new item
         self.items.append(item)
-        self.total_price += item.price
+        self._recalculate_totals()
+    
+    def _are_details_same(self, details1: dict, details2: dict) -> bool:
+        """Check if two detail dictionaries represent the same item."""
+        if len(details1) != len(details2):
+            return False
+        
+        for key in details1:
+            if key not in details2 or details1[key] != details2[key]:
+                return False
+        
+        return True
+    
+    def _recalculate_totals(self):
+        """Recalculate cart totals (price and item count)."""
+        self.total_price = sum(item.total_price for item in self.items)
+        self.total_items = sum(item.quantity for item in self.items)
 
     def get_cart_summary(self) -> str:
         summary = "Cart Items:\n"
         for idx, item in enumerate(self.items, 1):
             if item.item_type == "pizza":
-                summary += f"{idx}. {item.details['size'].capitalize()} {item.details['type'].capitalize()} Pizza - ${item.price:.2f}\n"
+                summary += f"{idx}. {item.quantity}x {item.details['size'].capitalize()} {item.details['type'].capitalize()} Pizza - ${item.total_price:.2f}\n"
             elif item.item_type == "coke":
-                summary += f"{idx}. {item.details['size'].capitalize()} Coke - ${item.price:.2f}\n"
-        summary += f"\nTotal: ${self.total_price:.2f}"
+                summary += f"{idx}. {item.quantity}x {item.details['size'].capitalize()} Coke - ${item.total_price:.2f}\n"
+        summary += f"\nTotal Items: {self.total_items}"
+        summary += f"\nTotal Price: ${self.total_price:.2f}"
         return summary
 
 
@@ -127,23 +157,27 @@ async def select_pizza_order(args: FlowArgs) -> PizzaOrderResult:
     """Handle pizza size and type selection."""
     size = args["size"]
     pizza_type = args["type"]
+    quantity = args.get("quantity", 1)  # Default to 1 if quantity not provided
 
     # Simple pricing
     base_price = {"small": 10.00, "medium": 15.00, "large": 20.00}
-    price = base_price[size]
+    unit_price = base_price[size]
+    total_price = unit_price * quantity
 
-    return {"size": size, "type": pizza_type, "price": price}
+    return {"size": size, "type": pizza_type, "price": unit_price, "quantity": quantity}
 
 
 async def select_coke_order(args: FlowArgs) -> CokeOrderResult:
     """Handle coke size selection."""
     size = args["size"]
+    quantity = args.get("quantity", 1)  # Default to 1 if quantity not provided
 
     # Simple pricing for coke
     base_price = {"small": 2.00, "medium": 3.00, "large": 4.00}
-    price = base_price[size]
+    unit_price = base_price[size]
+    total_price = unit_price * quantity
 
-    return {"size": size, "price": price}
+    return {"size": size, "price": unit_price, "quantity": quantity}
 
 
 async def add_to_cart(args: FlowArgs) -> Dict:
@@ -151,8 +185,9 @@ async def add_to_cart(args: FlowArgs) -> Dict:
     item_type = args["item_type"]
     item_details = args["item_details"]
     item_price = args["item_price"]
+    quantity = args.get("quantity", 1)  # Default to 1 if not specified
     
-    cart_item = CartItem(item_type, item_details, item_price)
+    cart_item = CartItem(item_type, item_details, item_price, quantity)
     shopping_cart.add_item(cart_item)
     
     return {"status": "added", "cart": shopping_cart.get_cart_summary()}
@@ -245,8 +280,14 @@ Remember to be friendly and casual.""",
                                     "enum": ["pepperoni", "cheese", "supreme", "vegetarian"],
                                     "description": "Type of pizza",
                                 },
+                                "quantity": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10,
+                                    "description": "Number of pizzas to order",
+                                },
                             },
-                            "required": ["size", "type"],
+                            "required": ["size", "type", "quantity"],
                         },
                         "transition_to": "add_to_cart",
                     },
@@ -283,8 +324,14 @@ Remember to be friendly and casual.""",
                                     "enum": ["small", "medium", "large"],
                                     "description": "Size of the coke",
                                 },
+                                "quantity": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 10,
+                                    "description": "Number of cokes to order",
+                                },
                             },
-                            "required": ["size"],
+                            "required": ["size", "quantity"],
                         },
                         "transition_to": "add_to_cart",
                     },
@@ -325,10 +372,15 @@ Be friendly and clear when confirming the item has been added to the cart.""",
                                 },
                                 "item_price": {
                                     "type": "number",
-                                    "description": "Price of the item being added",
+                                    "description": "Price per unit of the item being added",
+                                },
+                                "quantity": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "description": "Quantity of items to add",
                                 },
                             },
-                            "required": ["item_type", "item_details", "item_price"],
+                            "required": ["item_type", "item_details", "item_price", "quantity"],
                         },
                     },
                 },
